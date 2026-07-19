@@ -10,10 +10,11 @@ import time
 import csv
 import hashlib
 import argparse
+import pickle
 import requests
 from colorama import Fore, init, Style
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote_plus
 import concurrent.futures
@@ -22,6 +23,7 @@ import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
 from tqdm import tqdm
 import logging
+import webbrowser
 
 # ========================
 # CONFIGURATION
@@ -90,7 +92,145 @@ CACHE_DIR = SETTINGS.get("cache_dir", "cache")
 if CACHE_ENABLED and not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
-# Try to import fpdf
+# ========================
+# HISTORY SYSTEM
+# ========================
+
+HISTORY_FILE = "search_history.json"
+
+def load_history():
+    """Load search history from file"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_history_entry(entry):
+    """Add entry to search history"""
+    history = load_history()
+    history.insert(0, entry)
+    # Keep only last 100 entries
+    history = history[:100]
+    try:
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Failed to save history: {e}")
+
+def clear_history():
+    """Clear search history"""
+    if os.path.exists(HISTORY_FILE):
+        os.remove(HISTORY_FILE)
+        return True
+    return False
+
+def get_history(count=10):
+    """Get recent search history"""
+    history = load_history()
+    return history[:count]
+
+# ========================
+# SECURITY & REPUTATION
+# ========================
+
+def check_reputation(phone_number):
+    """Check phone reputation across multiple databases"""
+    results = {
+        'spam_database': [],
+        'scam_alert': [],
+        'trustpilot': [],
+        'whoscall': []
+    }
+    
+    clean_number = phone_number.replace('+', '').replace(' ', '').replace('-', '')
+    
+    # Check various spam databases via DuckDuckGo
+    queries = {
+        'spam_database': [
+            f'"{phone_number}" spam OR scam OR fraud',
+            f'"{clean_number}" spam call',
+            f'{clean_number} bad review',
+        ],
+        'scam_alert': [
+            f'"{phone_number}" scamalert OR fraudalert',
+            f'{clean_number} fraudulent',
+        ]
+    }
+    
+    for source, query_list in queries.items():
+        for query in query_list:
+            ddg_results = search_duckduckgo_html(query)
+            results[source].extend(ddg_results)
+    
+    # Remove duplicates
+    for source in results:
+        results[source] = _remove_duplicates(results[source])[:5]
+    
+    return results
+
+def _remove_duplicates(results):
+    """Remove duplicate results based on title or link"""
+    if not results:
+        return []
+    seen = set()
+    unique = []
+    for r in results:
+        key = r.get('link') or r.get('title', '')
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(r)
+    return unique
+
+def search_duckduckgo_html(query):
+    """Search DuckDuckGo HTML directly (no API key needed) - moved to utility"""
+    cache_key = get_cache_key(query, 'duckduckgo_html')
+    cached = load_from_cache(cache_key)
+    if cached:
+        return cached
+    
+    results = []
+    try:
+        url = "https://html.duckduckgo.com/html/"
+        params = {'q': query}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+        }
+        
+        response = retry_request(lambda: requests.get(url, params=params, headers=headers, timeout=REQUEST_TIMEOUT))
+        
+        if response and response.status_code == 200:
+            # Extract titles
+            title_matches = re.findall(r'class="result__a"[^>]*href="[^"]*"[^>]*>(.*?)</a>', response.text, re.DOTALL)
+            
+            # Extract snippets
+            snippet_matches = re.findall(r'class="result__snippet"[^>]*>(.*?)</', response.text, re.DOTALL)
+            
+            # Extract URLs
+            url_matches = re.findall(r'class="result__a"[^>]*href="([^"]*)"', response.text)
+            
+            for i in range(min(len(title_matches), len(url_matches), 10)):
+                # Clean HTML tags from title
+                title = re.sub(r'<[^>]+>', '', title_matches[i]).strip()
+                link = url_matches[i]
+                snippet = re.sub(r'<[^>]+>', '', snippet_matches[i]).strip()[:200] if i < len(snippet_matches) else ''
+                
+                if title and len(title) > 5:
+                    results.append({
+                        'title': title[:100],
+                        'link': link,
+                        'snippet': snippet
+                    })
+        
+    except Exception as e:
+        logger.error(f"DuckDuckGo HTML search error: {e}")
+    
+    save_to_cache(cache_key, results)
+    return results
 try:
     from fpdf import FPDF, XPos, YPos
     PDF_AVAILABLE = True
@@ -771,6 +911,168 @@ class SearchSources:
             results.extend(ddg_results)
         
         return self._remove_duplicates(results)
+    
+    def check_data_breach(self, phone_number, email=None):
+        """Check if phone/email appears in data breaches (Have I Been Pwned style)"""
+        results = {
+            'breaches': [],
+            'pastes': [],
+            'reputation': 'unknown'
+        }
+        
+        clean_number = phone_number.replace('+', '').replace(' ', '').replace('-', '')
+        
+        # Check for breaches via search
+        queries = [
+            f'"{phone_number}" data breach OR leak OR hacked',
+            f'"{clean_number}" database leak OR exposed',
+        ]
+        if email:
+            queries.append(f'"{email}" data breach')
+        
+        for query in queries:
+            if query:
+                ddg_results = self.search_duckduckgo_html(query)
+                results['breaches'].extend(ddg_results)
+        
+        # Check pastebin-style leaks
+        pastebin_queries = [
+            f'site:pastebin.com "{phone_number}"',
+            f'site:github.com "{phone_number}"',
+            f'site:reddit.com "{phone_number}" leak',
+        ]
+        
+        for query in pastebin_queries:
+            ddg_results = self.search_duckduckgo_html(query)
+            results['pastes'].extend(ddg_results)
+        
+        # Clean up duplicates
+        results['breaches'] = self._remove_duplicates(results['breaches'])[:10]
+        results['pastes'] = self._remove_duplicates(results['pastes'])[:10]
+        
+        # Determine reputation
+        spam_keywords = ['spam', 'scam', 'fraud', 'phishing', 'malware']
+        total_results = len(results['breaches']) + len(results['pastes'])
+        
+        if total_results > 20:
+            results['reputation'] = 'dangerous'
+        elif total_results > 10:
+            results['reputation'] = 'suspicious'
+        elif total_results > 0:
+            results['reputation'] = 'neutral'
+        else:
+            results['reputation'] = 'clean'
+        
+        return results
+    
+    def search_social_media(self, phone_number, name=None):
+        """Search social media platforms"""
+        results = {
+            'facebook': [],
+            'instagram': [],
+            'linkedin': [],
+            'twitter': [],
+            'tiktok': []
+        }
+        
+        queries = {
+            'facebook': [
+                f'site:facebook.com "{phone_number}"',
+                f'site:facebook.com "{name}"' if name else f'site:facebook.com "{phone_number}"',
+            ],
+            'instagram': [
+                f'site:instagram.com "{phone_number}"',
+                f'site:instagram.com "{name}"' if name else f'site:instagram.com "{phone_number}"',
+            ],
+            'linkedin': [
+                f'site:linkedin.com "{phone_number}"',
+                f'site:linkedin.com "{name}"' if name else f'site:linkedin.com "{phone_number}"',
+            ],
+            'twitter': [
+                f'site:twitter.com "{phone_number}"',
+                f'site:x.com "{phone_number}"',
+            ],
+            'tiktok': [
+                f'site:tiktok.com "@{name}"' if name else f'site:tiktok.com "{phone_number}"',
+            ]
+        }
+        
+        for platform, query_list in queries.items():
+            for query in query_list:
+                ddg_results = self.search_duckduckgo_html(query)
+                results[platform].extend(ddg_results)
+            
+            # Remove duplicates
+            results[platform] = self._remove_duplicates(results[platform])[:5]
+        
+        return results
+    
+    def check_telegram_contacts(self, phone_number):
+        """Check if phone is registered on Telegram (via t.me links)"""
+        results = {
+            'profiles': [],
+            'channels': [],
+            'groups': []
+        }
+        
+        clean_number = phone_number.replace('+', '').replace(' ', '').replace('-', '')
+        
+        # Search for Telegram links
+        queries = [
+            f't.me/{clean_number}',
+            f't.me search "{phone_number}"',
+            f'site:t.me "{phone_number}"',
+        ]
+        
+        for query in queries:
+            ddg_results = self.search_duckduckgo_html(query)
+            for r in ddg_results:
+                if 't.me/' in r.get('link', ''):
+                    if '/channel/' in r.get('link', ''):
+                        results['channels'].append(r)
+                    elif '/joinchat/' in r.get('link', ''):
+                        results['groups'].append(r)
+                    else:
+                        results['profiles'].append(r)
+        
+        # Clean up
+        results['profiles'] = self._remove_duplicates(results['profiles'])[:5]
+        results['channels'] = self._remove_duplicates(results['channels'])[:5]
+        results['groups'] = self._remove_duplicates(results['groups'])[:5]
+        
+        return results
+    
+    def search_email_related(self, email):
+        """Search for email leaks and associated accounts"""
+        results = {
+            'breaches': [],
+            'accounts': [],
+            'social': []
+        }
+        
+        queries = {
+            'breaches': [
+                f'"{email}" data breach',
+                f'"{email}" leaked',
+            ],
+            'accounts': [
+                f'site:github.com "{email}"',
+                f'site:stackoverflow.com "{email}"',
+            ],
+            'social': [
+                f'site:linkedin.com "{email}"',
+                f'site:twitter.com "{email}"',
+            ]
+        }
+        
+        for category, query_list in queries.items():
+            for query in query_list:
+                ddg_results = self.search_duckduckgo_html(query)
+                results[category].extend(ddg_results)
+            
+            results[category] = self._remove_duplicates(results[category])[:5]
+        
+        return results
 
 class PhoneOSINT:
     """Main OSINT analyzer class with interactive menu and batch processing"""
@@ -797,7 +1099,11 @@ class PhoneOSINT:
             'twitter': [],
             'vk': [],
             'telegram': [],
-            'classifieds': []
+            'classifieds': [],
+            'social_media': {},
+            'telegram_contacts': {},
+            'data_breach': {},
+            'reputation': {}
         }
         
         self.report_dir = "reports"
@@ -863,14 +1169,16 @@ class PhoneOSINT:
             'numverify': (self.sources.check_numverify, (number, region)),
             'google': (self.sources.search_google, (number, region)),
             'duckduckgo': (self.sources.search_duckduckgo, (number,)),
-            'duckduckgo_html': (self.sources.search_duckduckgo_html, (number,)),
+            'duckduckgo_html': (search_duckduckgo_html, (number,)),
             'yandex': (self.sources.search_yandex, (number,)),
             'reddit': (self.sources.search_reddit, (number,)),
             'github': (self.sources.search_github, (number,)),
             'twitter': (self.sources.search_twitter, (number,)),
             'vk': (self.sources.search_vk, (number,)),
             'telegram': (self.sources.search_telegram, (number,)),
-            'classifieds': (self.sources.search_classifieds, (number, None))
+            'classifieds': (self.sources.search_classifieds, (number, None)),
+            'social_media': (self.sources.search_social_media, (number, None)),
+            'telegram_contacts': (self.sources.check_telegram_contacts, (number,))
         }
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1022,6 +1330,36 @@ class PhoneOSINT:
                     print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
             print()
         
+        # Social Media
+        if self.results.get('social_media'):
+            sm = self.results['social_media']
+            for platform in ['facebook', 'instagram', 'linkedin', 'twitter', 'tiktok']:
+                if sm.get(platform):
+                    icons = {
+                        'facebook': '🔵',
+                        'instagram': '📷',
+                        'linkedin': '💼',
+                        'twitter': '🐦',
+                        'tiktok': '🎵'
+                    }
+                    print(f"{Fore.YELLOW}{icons.get(platform, '🌐')} {platform.upper()}:")
+                    for i, item in enumerate(sm[platform][:3], 1):
+                        print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:70]}")
+                        if item.get('link'):
+                            print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
+                    print()
+        
+        # Telegram Contacts
+        if self.results.get('telegram_contacts'):
+            tc = self.results['telegram_contacts']
+            if tc.get('profiles'):
+                print(f"{Fore.YELLOW}✈️ TELEGRAM ПРОФИЛИ:")
+                for i, item in enumerate(tc['profiles'][:5], 1):
+                    print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:70]}")
+                    if item.get('link'):
+                        print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
+                print()
+        
         # Twitter
         if self.results.get('twitter'):
             print(f"{Fore.YELLOW}🐦 TWITTER/X:")
@@ -1094,6 +1432,9 @@ class PhoneOSINT:
             ('DuckDuckGo HTML', len(self.results.get('duckduckgo_html', []))),
             ('Yandex', len(self.results.get('yandex', []))),
             ('Avito/Youla', len(self.results.get('classifieds', []))),
+            ('Facebook', len(self.results.get('social_media', {}).get('facebook', []))),
+            ('Instagram', len(self.results.get('social_media', {}).get('instagram', []))),
+            ('LinkedIn', len(self.results.get('social_media', {}).get('linkedin', []))),
             ('Twitter', len(self.results.get('twitter', []))),
             ('VK', len(self.results.get('vk', []))),
             ('Telegram', len(self.results.get('telegram', []))),
@@ -1433,10 +1774,12 @@ def show_menu():
     print(f"{Fore.GREEN}{'─'*70}")
     print(f"{Fore.WHITE}  1. {Fore.GREEN}Анализ одного номера")
     print(f"{Fore.WHITE}  2. {Fore.GREEN}Поиск по ФИО")
-    print(f"  3. {Fore.GREEN}Пакетный анализ (несколько номеров)")
-    print(f"  4. {Fore.GREEN}Показать настройки")
-    print(f"  5. {Fore.GREEN}Очистить кеш")
-    print(f"  6. {Fore.GREEN}Просмотр отчётов")
+    print(f"{Fore.WHITE}  3. {Fore.GREEN}Пакетный анализ (несколько номеров)")
+    print(f"{Fore.WHITE}  4. {Fore.GREEN}Проверка репутации номера")
+    print(f"{Fore.WHITE}  5. {Fore.GREEN}История поисков")
+    print(f"  6. {Fore.GREEN}Показать настройки")
+    print(f"  7. {Fore.GREEN}Очистить кеш")
+    print(f"  8. {Fore.GREEN}Просмотр отчётов")
     print(f"  0. {Fore.RED}Выход")
     print(f"{Fore.GREEN}{'─'*70}\n")
 
