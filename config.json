@@ -1,0 +1,65 @@
+{
+    "settings": {
+        "default_region": "pe",
+        "max_workers": 6,
+        "request_timeout": 15,
+        "retry_attempts": 3,
+        "retry_delay": 2,
+        "cache_enabled": true,
+        "cache_dir": "cache",
+        "export_formats": ["json", "pdf", "csv"],
+        "user_agent": "SearchPhone/2.0 OSINT Tool"
+    },
+    "search": {
+        "google": {
+            "enabled": true,
+            "max_results": 20
+        },
+        "duckduckgo": {
+            "enabled": true,
+            "max_results": 10
+        },
+        "reddit": {
+            "enabled": true,
+            "max_results": 20
+        },
+        "github": {
+            "enabled": true,
+            "max_results": 10
+        },
+        "twitter": {
+            "enabled": true,
+            "max_results": 15
+        },
+        "vk": {
+            "enabled": true,
+            "max_results": 10
+        },
+        "telegram": {
+            "enabled": true,
+            "max_results": 10
+        }
+    },
+    "regions": {
+        "pe": "Peru",
+        "ru": "Russia",
+        "us": "United States",
+        "gb": "United Kingdom",
+        "ca": "Canada",
+        "mx": "Mexico",
+        "ar": "Argentina",
+        "br": "Brazil",
+        "co": "Colombia",
+        "es": "Spain",
+        "de": "Germany",
+        "fr": "France",
+        "it": "Italy",
+        "pl": "Poland",
+        "ua": "Ukraine",
+        "kz": "Kazakhstan",
+        "by": "Belarus",
+        "tr": "Turkey",
+        "jp": "Japan",
+        "cn": "China"
+    }
+}
