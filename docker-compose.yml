@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  searchphone:
+    build: .
+    container_name: searchphone
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./.env:/app/.env
+      - ./config.json:/app/config.json
+      - ./reports:/app/reports
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
