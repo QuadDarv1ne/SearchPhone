@@ -16,13 +16,15 @@ from src.cache import get_cache_key, load_from_cache, save_to_cache
 logger = logging.getLogger(__name__)
 
 
-def retry_request(func, *args, max_retries=None, delay=None, **kwargs):
+def retry_request(func, *args, max_retries=None, delay=None, timeout=None, **kwargs):
     """Retry decorator for HTTP requests with exponential backoff"""
     max_retries = max_retries or RETRY_ATTEMPTS
     delay = delay or RETRY_DELAY
+    if timeout is None:
+        timeout = REQUEST_TIMEOUT
     for attempt in range(max_retries):
         try:
-            return func(*args, **kwargs)
+            return func(*args, timeout=timeout, **kwargs)
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
                 wait_time = delay * (2 ** attempt)

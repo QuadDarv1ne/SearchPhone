@@ -39,7 +39,7 @@ class SearchSources:
 
         proxies = PROXIES if PROXIES else None
 
-        def do_request():
+        def do_request(timeout=timeout):
             return requests.get(url, params=params, headers=headers, timeout=timeout, proxies=proxies)
 
         response = retry_request(do_request)
@@ -85,7 +85,7 @@ class SearchSources:
         return []
 
     def search_duckduckgo(self, phone_number):
-        """Search DuckDuckGo"""
+        """Search DuckDuckGo via HTML (no API key needed)"""
         if not SEARCH_CONFIG.get('duckduckgo', {}).get('enabled', True):
             return []
 
@@ -95,21 +95,10 @@ class SearchSources:
             return cached
 
         try:
-            url = "https://api.duckduckgo.com/"
-            params = {'q': f'"{phone_number}"', 'format': 'json', 'no_html': 1}
-            response = self.make_request(url, params=params)
-
-            if response and response.status_code == 200:
-                data = response.json()
-                results = []
-                if data.get('AbstractText'):
-                    results.append({
-                        'title': data.get('Abstract', 'Abstract'),
-                        'link': data.get('AbstractURL', ''),
-                        'snippet': data.get('AbstractText', '')[:200]
-                    })
-                save_to_cache(cache_key, results)
-                return results
+            query = f'"{phone_number}" phone OR contact OR tel OR "tel"'
+            results = self.search_duckduckgo_html(query)
+            save_to_cache(cache_key, results)
+            return results
         except Exception as e:
             logger.error(f"DuckDuckGo search error: {e}")
         return []
@@ -351,7 +340,7 @@ class SearchSources:
                 'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
             }
 
-            response = self.make_request(url, params=params, headers=headers)
+            response = self.make_request(url, params=params, headers=headers, timeout=5)
 
             if response and response.status_code == 200:
                 # Extract titles
@@ -373,6 +362,10 @@ class SearchSources:
                             'snippet': snippet
                         })
 
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"DuckDuckGo HTML search timeout: {e}")
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"DuckDuckGo HTML connection error: {e}")
         except Exception as e:
             logger.error(f"DuckDuckGo HTML search error: {e}")
 
@@ -388,7 +381,7 @@ class SearchSources:
 
         results = []
         try:
-            url = "https://yandex.ru/search/"
+            url = "https://www.yandex.ru/search/"
             params = {'text': query, 'lr': 213}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -396,10 +389,10 @@ class SearchSources:
                 'Accept-Language': 'ru-RU,ru;q=0.9'
             }
 
-            response = self.make_request(url, params=params, headers=headers)
+            response = self.make_request(url, params=params, headers=headers, timeout=10)
 
-            if response and response.status_code == 200:
-                # Extract result blocks
+            if response and response.status_code == 200 and response.text:
+                # Extract result blocks with improved regex
                 result_blocks = re.findall(r'<div class="organic__item".*?</div>\s*</div>\s*</div>', response.text, re.DOTALL)
 
                 for block in result_blocks[:max_results]:
@@ -412,11 +405,12 @@ class SearchSources:
                         link = link_match.group(1) if link_match else ''
                         snippet = re.sub(r'<[^>]+>', '', snippet_match.group(1)).strip()[:200] if snippet_match else ''
 
-                        results.append({
-                            'title': title[:100],
-                            'link': link,
-                            'snippet': snippet
-                        })
+                        if title and len(title) > 3:
+                            results.append({
+                                'title': title[:100],
+                                'link': link,
+                                'snippet': snippet
+                            })
 
                 # Fallback: try alternative Yandex parsing
                 if not results:
@@ -425,10 +419,11 @@ class SearchSources:
 
                     for i in range(min(len(title_matches), len(link_matches), max_results)):
                         title = title_matches[i].strip()
-                        if len(title) > 10 and 'yandex' not in link_matches[i] and 'cdn' not in link_matches[i]:
+                        link = link_matches[i]
+                        if len(title) > 10 and 'yandex' not in link and 'cdn' not in link and 'ya.ru' not in link:
                             results.append({
                                 'title': title[:100],
-                                'link': link_matches[i],
+                                'link': link,
                                 'snippet': ''
                             })
 
@@ -529,6 +524,11 @@ class SearchSources:
         if not self.api_keys['serpapi']:
             return []
 
+        cache_key = get_cache_key(query, 'vk_serpapi')
+        cached = load_from_cache(cache_key)
+        if cached:
+            return cached
+
         try:
             url = "https://serpapi.com/search"
             params = {
@@ -547,6 +547,7 @@ class SearchSources:
                         'link': item.get('link', ''),
                         'snippet': item.get('snippet', '')
                     })
+                save_to_cache(cache_key, results)
                 return results
         except Exception as e:
             logger.error(f"VK SerpAPI error: {e}")
