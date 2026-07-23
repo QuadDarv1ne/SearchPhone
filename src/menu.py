@@ -3,17 +3,17 @@ Interactive menu module for SearchPhone OSINT tool.
 Provides the main menu, interactive mode, and history management.
 """
 
-import os
 import json
-import shutil
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
+
 from colorama import Fore, Style
 
-from src.config import SETTINGS, CACHE_DIR, CACHE_ENABLED, REQUEST_TIMEOUT, RETRY_ATTEMPTS
 from src.analyzer import PhoneOSINT
 from src.cache import CacheManager
+from src.config import CACHE_DIR, CACHE_ENABLED, REQUEST_TIMEOUT, RETRY_ATTEMPTS, SETTINGS
 from src.utils import check_reputation
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def load_history():
     """Load search history from file"""
     if os.path.exists(HISTORY_FILE):
         try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            with open(HISTORY_FILE, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return []
@@ -39,7 +39,7 @@ def save_history_entry(entry):
     history.insert(0, entry)
     history = history[:100]
     try:
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.warning(f"Failed to save history: {e}")
@@ -99,11 +99,11 @@ def interactive_mode():
         show_menu()
         choice = input(f"{Fore.GREEN}Выберите опцию: {Style.RESET_ALL}").strip()
 
-        if choice == '0':
+        if choice == "0":
             print(f"\n{Fore.YELLOW}До свидания! 👋\n")
             break
 
-        elif choice == '1':
+        elif choice == "1":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}📱 АНАЛИЗ ОДНОГО НОМЕРА")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -113,21 +113,16 @@ def interactive_mode():
                 print(f"{Fore.RED}Номер не может быть пустым!")
                 continue
 
-            region = input(f"{Fore.WHITE}Введите код региона (например: ru, us, pe): {Fore.GREEN}").strip() or SETTINGS.get('default_region', 'pe')
+            region = input(f"{Fore.WHITE}Введите код региона (например: ru, us, pe): {Fore.GREEN}").strip() or SETTINGS.get("default_region", "pe")
 
             analyzer.analyze_single_phone(phone, region)
             analyzer.display_results()
             analyzer.export_results()
 
             # Save to history
-            save_history_entry({
-                'type': 'phone',
-                'query': phone,
-                'region': region,
-                'timestamp': datetime.now().isoformat()
-            })
+            save_history_entry({"type": "phone", "query": phone, "region": region, "timestamp": datetime.now().isoformat()})
 
-        elif choice == '2':
+        elif choice == "2":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}👤 ПОИСК ПО ФИО")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -146,47 +141,47 @@ def interactive_mode():
             print(f"{Fore.GREEN}👤 РЕЗУЛЬТАТЫ ПОИСКА: {full_name}")
             print(f"{Fore.CYAN}{'='*70}\n")
 
-            if name_results.get('duckduckgo'):
+            if name_results.get("duckduckgo"):
                 print(f"{Fore.YELLOW}🦆 DUCKDUCKGO:")
-                for i, item in enumerate(name_results['duckduckgo'][:5], 1):
+                for i, item in enumerate(name_results["duckduckgo"][:5], 1):
                     print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                    if item.get('link'):
+                    if item.get("link"):
                         print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
-                    if item.get('snippet'):
+                    if item.get("snippet"):
                         print(f"     {Fore.CYAN}📝 {item['snippet'][:150]}...")
                 print()
 
-            if name_results.get('yandex'):
+            if name_results.get("yandex"):
                 print(f"{Fore.YELLOW}🔴 YANDEX:")
-                for i, item in enumerate(name_results['yandex'][:5], 1):
+                for i, item in enumerate(name_results["yandex"][:5], 1):
                     print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                    if item.get('link'):
+                    if item.get("link"):
                         print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
-                    if item.get('snippet'):
+                    if item.get("snippet"):
                         print(f"     {Fore.CYAN}📝 {item['snippet'][:150]}...")
                 print()
 
-            if name_results.get('vk'):
+            if name_results.get("vk"):
                 print(f"{Fore.YELLOW}🔵 VKONTAKTE:")
-                for i, item in enumerate(name_results['vk'][:5], 1):
+                for i, item in enumerate(name_results["vk"][:5], 1):
                     print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                    if item.get('link'):
+                    if item.get("link"):
                         print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
                 print()
 
-            if name_results.get('telegram'):
+            if name_results.get("telegram"):
                 print(f"{Fore.YELLOW}✈️ TELEGRAM:")
-                for i, item in enumerate(name_results['telegram'][:5], 1):
+                for i, item in enumerate(name_results["telegram"][:5], 1):
                     print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                    if item.get('link'):
+                    if item.get("link"):
                         print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
                 print()
 
-            if name_results.get('linkedin'):
+            if name_results.get("linkedin"):
                 print(f"{Fore.YELLOW}💼 LINKEDIN:")
-                for i, item in enumerate(name_results['linkedin'][:5], 1):
+                for i, item in enumerate(name_results["linkedin"][:5], 1):
                     print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                    if item.get('link'):
+                    if item.get("link"):
                         print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
                 print()
 
@@ -203,20 +198,16 @@ def interactive_mode():
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(analyzer.reporter.report_dir, f"name_{timestamp}.json")
             try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump({'name': full_name, 'timestamp': timestamp, 'results': name_results}, f, indent=2, ensure_ascii=False)
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump({"name": full_name, "timestamp": timestamp, "results": name_results}, f, indent=2, ensure_ascii=False)
                 print(f"{Fore.GREEN}✅ Результаты сохранены: {filename}")
             except Exception as e:
                 print(f"{Fore.RED}❌ Ошибка сохранения: {e}")
 
             # Save to history
-            save_history_entry({
-                'type': 'name',
-                'query': full_name,
-                'timestamp': datetime.now().isoformat()
-            })
+            save_history_entry({"type": "name", "query": full_name, "timestamp": datetime.now().isoformat()})
 
-        elif choice == '3':
+        elif choice == "3":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}📋 ПАКЕТНЫЙ АНАЛИЗ")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -226,27 +217,23 @@ def interactive_mode():
                 print(f"{Fore.RED}Номера не могут быть пустыми!")
                 continue
 
-            phones = [p.strip() for p in phone_input.split(',') if p.strip()]
+            phones = [p.strip() for p in phone_input.split(",") if p.strip()]
             if not phones:
                 print(f"{Fore.RED}Не введено ни одного номера!")
                 continue
 
-            region = input(f"{Fore.WHITE}Введите код региона: {Fore.GREEN}").strip() or SETTINGS.get('default_region', 'pe')
+            region = input(f"{Fore.WHITE}Введите код региона: {Fore.GREEN}").strip() or SETTINGS.get("default_region", "pe")
 
             batch_results = analyzer.analyze_batch(phones, region)
             if batch_results:
                 analyzer.reporter.export_batch_csv(analyzer.timestamp, batch_results)
 
             # Save to history
-            save_history_entry({
-                'type': 'batch',
-                'query': ', '.join(phones),
-                'count': len(phones),
-                'region': region,
-                'timestamp': datetime.now().isoformat()
-            })
+            save_history_entry(
+                {"type": "batch", "query": ", ".join(phones), "count": len(phones), "region": region, "timestamp": datetime.now().isoformat()}
+            )
 
-        elif choice == '4':
+        elif choice == "4":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}🛡️ ПРОВЕРКА РЕПУТАЦИИ НОМЕРА")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -269,20 +256,16 @@ def interactive_mode():
                     print(f"{Fore.YELLOW}📌 {source.upper()}:")
                     for i, item in enumerate(items[:5], 1):
                         print(f"{Fore.WHITE}  {i}. {item.get('title', 'No title')[:80]}")
-                        if item.get('link'):
+                        if item.get("link"):
                             print(f"     {Fore.BLUE}🔗 {item['link'][:100]}")
                     print()
                 else:
                     print(f"{Fore.WHITE}📌 {source.upper()}: Нет результатов\n")
 
             # Save to history
-            save_history_entry({
-                'type': 'reputation',
-                'query': phone,
-                'timestamp': datetime.now().isoformat()
-            })
+            save_history_entry({"type": "reputation", "query": phone, "timestamp": datetime.now().isoformat()})
 
-        elif choice == '5':
+        elif choice == "5":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}📜 ИСТОРИЯ ПОИСКОВ")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -291,24 +274,24 @@ def interactive_mode():
             if history:
                 print(f"\n{Fore.WHITE}Последние поиски:")
                 for i, entry in enumerate(history, 1):
-                    entry_type = entry.get('type', 'unknown')
-                    query = entry.get('query', 'N/A')
-                    ts = entry.get('timestamp', '')[:19]
-                    icons = {'phone': '📱', 'name': '👤', 'batch': '📋', 'reputation': '🛡️'}
-                    icon = icons.get(entry_type, '❓')
+                    entry_type = entry.get("type", "unknown")
+                    query = entry.get("query", "N/A")
+                    ts = entry.get("timestamp", "")[:19]
+                    icons = {"phone": "📱", "name": "👤", "batch": "📋", "reputation": "🛡️"}
+                    icon = icons.get(entry_type, "❓")
                     print(f"  {i}. {icon} [{entry_type}] {query} ({ts})")
             else:
                 print(f"\n{Fore.YELLOW}История пуста")
 
             # Option to clear history
             clear_choice = input(f"\n{Fore.WHITE}Очистить историю? (y/n): {Fore.GREEN}").strip().lower()
-            if clear_choice == 'y':
+            if clear_choice == "y":
                 if clear_history():
                     print(f"{Fore.GREEN}✅ История очищена!")
                 else:
                     print(f"{Fore.YELLOW}История уже пуста")
 
-        elif choice == '6':
+        elif choice == "6":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}⚙️ НАСТРОЙКИ")
             print(f"{Fore.CYAN}{'─'*70}")
@@ -322,20 +305,20 @@ def interactive_mode():
             print(f"  SerpAPI: {'✓' if analyzer.api_keys['serpapi'] else '✗'}")
             print(f"  GitHub: {'✓' if analyzer.api_keys['github'] else '✗'}")
 
-        elif choice == '7':
+        elif choice == "7":
             if os.path.exists(CACHE_DIR):
                 removed = cache_manager.clear_all()
                 print(f"\n{Fore.GREEN}✅ Кеш очищен! Удалено {removed} файлов.")
             else:
                 print(f"\n{Fore.YELLOW}Кеш пуст")
 
-        elif choice == '8':
+        elif choice == "8":
             print(f"\n{Fore.CYAN}{'─'*70}")
             print(f"{Fore.YELLOW}📄 ОТЧЁТЫ")
             print(f"{Fore.CYAN}{'─'*70}")
 
             if os.path.exists(analyzer.reporter.report_dir):
-                files = sorted(Path(analyzer.reporter.report_dir).glob('*'), key=os.path.getmtime, reverse=True)
+                files = sorted(Path(analyzer.reporter.report_dir).glob("*"), key=os.path.getmtime, reverse=True)
                 if files:
                     print(f"\n{Fore.WHITE}Последние отчёты:")
                     for i, f in enumerate(files[:10], 1):
@@ -358,7 +341,7 @@ def interactive_mode():
 
 def main():
     """Main entry point"""
-    from src.cli import parse_cli_args, cli_mode
+    from src.cli import cli_mode, parse_cli_args
 
     # Parse CLI arguments
     args = parse_cli_args()

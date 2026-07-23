@@ -3,9 +3,10 @@ Configuration module for SearchPhone OSINT tool.
 Loads environment variables, config.json, and provides default settings.
 """
 
-import os
 import json
 import logging
+import os
+
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ CONFIG_FILE = "config.json"
 CONFIG = {}
 if os.path.exists(CONFIG_FILE):
     try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
             CONFIG = json.load(f)
     except Exception as e:
         logger.warning(f"Failed to load config: {e}")
@@ -38,7 +39,7 @@ DEFAULT_CONFIG = {
         "log_file": "logs/searchphone.log",
         "log_level": "WARNING",
         "http_proxy": "",
-        "https_proxy": ""
+        "https_proxy": "",
     },
     "search": {
         "google": {"enabled": True, "max_results": 20},
@@ -47,8 +48,8 @@ DEFAULT_CONFIG = {
         "github": {"enabled": True, "max_results": 10},
         "twitter": {"enabled": True, "max_results": 15},
         "vk": {"enabled": True, "max_results": 10},
-        "telegram": {"enabled": True, "max_results": 10}
-    }
+        "telegram": {"enabled": True, "max_results": 10},
+    },
 }
 
 # Merge config with defaults

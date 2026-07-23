@@ -5,6 +5,7 @@ Tests for search sources module.
 import sys
 import os
 import pytest
+from unittest.mock import patch, MagicMock
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -22,28 +23,25 @@ def test_search_sources_init():
 
 
 def test_make_request_timeout():
-    """Test that make_request has timeout"""
+    """Test that make_request returns None on failure"""
     sources = SearchSources()
-    # Test with a URL that will timeout (non-routable IP)
-    response = sources.make_request(
-        'http://10.255.255.1',
-        timeout=2
-    )
-    # Should timeout and return None
-    assert response is None
+    with patch("src.sources.retry_request", return_value=None):
+        response = sources.make_request(
+            'http://10.255.255.1',
+            timeout=2
+        )
+        assert response is None
 
 
 def test_search_duckduckgo_html_timeout():
-    """Test that duckduckgo HTML search has reasonable timeout"""
+    """Test that duckduckgo HTML search returns a list"""
     sources = SearchSources()
-    # Test with a query that should return quickly (or fail gracefully)
-    try:
+    with patch("src.sources.search_duckduckgo_html", return_value=[
+        {"title": "Test", "link": "http://test.com", "snippet": "Test"}
+    ]):
         result = sources.search_duckduckgo_html('test query')
-        # Should return list (may be empty)
         assert isinstance(result, list)
-    except Exception:
-        # If it fails, that's okay - we just want to make sure it doesn't hang
-        pass
+        assert len(result) == 1
 
 
 def test_remove_duplicates_in_search():

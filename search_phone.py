@@ -4,16 +4,17 @@
 #
 # This is the main entry point. It imports the modularized components from src/.
 
-import sys
 import os
+import sys
 
 # Ensure the project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Setup logging with file rotation before any other imports
-from src.config import LOG_FILE, LOG_LEVEL
 import logging
 from logging.handlers import RotatingFileHandler
+
+from src.config import LOG_FILE, LOG_LEVEL
 
 # Ensure logs directory exists
 log_dir = os.path.dirname(LOG_FILE)
@@ -26,10 +27,8 @@ root_logger.setLevel(LOG_LEVEL)
 
 # File handler with rotation (5 MB max, 3 backups)
 try:
-    file_handler = RotatingFileHandler(
-        LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding='utf-8'
-    )
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
     root_logger.addHandler(file_handler)
 except Exception as e:
     print(f"Warning: Could not set up file logging: {e}")
@@ -37,11 +36,11 @@ except Exception as e:
 # Console handler (WARNING and above)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.WARNING)
-console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 root_logger.addHandler(console_handler)
 
 # Import and run main
-from src.menu import main
+from src.menu import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

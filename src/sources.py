@@ -3,19 +3,16 @@ Search sources module for SearchPhone OSINT tool.
 Contains the SearchSources class with all search methods.
 """
 
+import logging
 import os
 import re
-import json
-import logging
-import requests
 from datetime import datetime
-from colorama import Fore
 
-from src.config import (
-    SETTINGS, SEARCH_CONFIG, REQUEST_TIMEOUT, PROXIES
-)
+import requests
+
 from src.cache import get_cache_key, load_from_cache, save_to_cache
-from src.utils import retry_request, _remove_duplicates, search_duckduckgo_html
+from src.config import PROXIES, REQUEST_TIMEOUT, SEARCH_CONFIG, SETTINGS
+from src.utils import _remove_duplicates, retry_request, search_duckduckgo_html
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +22,15 @@ class SearchSources:
 
     def __init__(self):
         self.api_keys = {
-            'numverify': os.getenv('NUMVERIFY_KEY', ''),
-            'serpapi': os.getenv('SERPAPI_KEY', ''),
-            'github': os.getenv('GITHUB_TOKEN', '')
+            "numverify": os.getenv("NUMVERIFY_KEY", ""),
+            "serpapi": os.getenv("SERPAPI_KEY", ""),
+            "github": os.getenv("GITHUB_TOKEN", ""),
         }
 
     def make_request(self, url, params=None, headers=None, timeout=None):
         """Make HTTP request with retry logic and optional proxy support"""
         if headers is None:
-            headers = {'User-Agent': SETTINGS.get('user_agent', 'SearchPhone/2.0')}
+            headers = {"User-Agent": SETTINGS.get("user_agent", "SearchPhone/2.0")}
         if timeout is None:
             timeout = REQUEST_TIMEOUT
 
@@ -45,14 +42,14 @@ class SearchSources:
         response = retry_request(do_request)
         return response
 
-    def search_google(self, phone_number, region='pe'):
+    def search_google(self, phone_number, region="pe"):
         """Search Google using SerpAPI"""
-        if not SEARCH_CONFIG.get('google', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("google", {}).get("enabled", True):
             return []
-        if not self.api_keys['serpapi']:
+        if not self.api_keys["serpapi"]:
             return []
 
-        cache_key = get_cache_key(phone_number, 'google')
+        cache_key = get_cache_key(phone_number, "google")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
@@ -60,24 +57,26 @@ class SearchSources:
         try:
             url = "https://serpapi.com/search"
             params = {
-                'q': f'"{phone_number}" phone OR contacto OR celular OR "tel"',
-                'api_key': self.api_keys['serpapi'],
-                'num': SEARCH_CONFIG['google'].get('max_results', 20),
-                'gl': region,
-                'hl': 'es'
+                "q": f'"{phone_number}" phone OR contacto OR celular OR "tel"',
+                "api_key": self.api_keys["serpapi"],
+                "num": SEARCH_CONFIG["google"].get("max_results", 20),
+                "gl": region,
+                "hl": "es",
             }
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('organic_results', [])[:SEARCH_CONFIG['google'].get('max_results', 20)]:
-                    results.append({
-                        'title': item.get('title', 'Sin título'),
-                        'link': item.get('link', ''),
-                        'snippet': item.get('snippet', ''),
-                        'position': item.get('position', 0)
-                    })
+                for item in data.get("organic_results", [])[: SEARCH_CONFIG["google"].get("max_results", 20)]:
+                    results.append(
+                        {
+                            "title": item.get("title", "Sin título"),
+                            "link": item.get("link", ""),
+                            "snippet": item.get("snippet", ""),
+                            "position": item.get("position", 0),
+                        }
+                    )
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -86,10 +85,10 @@ class SearchSources:
 
     def search_duckduckgo(self, phone_number):
         """Search DuckDuckGo via HTML (no API key needed)"""
-        if not SEARCH_CONFIG.get('duckduckgo', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("duckduckgo", {}).get("enabled", True):
             return []
 
-        cache_key = get_cache_key(phone_number, 'duckduckgo')
+        cache_key = get_cache_key(phone_number, "duckduckgo")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
@@ -105,33 +104,35 @@ class SearchSources:
 
     def search_reddit(self, phone_number):
         """Search Reddit"""
-        if not SEARCH_CONFIG.get('reddit', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("reddit", {}).get("enabled", True):
             return []
 
-        cache_key = get_cache_key(phone_number, 'reddit')
+        cache_key = get_cache_key(phone_number, "reddit")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
         try:
             url = "https://www.reddit.com/r/all/search.json"
-            params = {'q': f'"{phone_number}"', 'limit': SEARCH_CONFIG['reddit'].get('max_results', 20)}
-            headers = {'User-Agent': SETTINGS.get('user_agent', 'SearchPhone/2.0')}
+            params = {"q": f'"{phone_number}"', "limit": SEARCH_CONFIG["reddit"].get("max_results", 20)}
+            headers = {"User-Agent": SETTINGS.get("user_agent", "SearchPhone/2.0")}
 
             response = self.make_request(url, params=params, headers=headers)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('data', {}).get('children', []):
-                    post = item.get('data', {})
-                    results.append({
-                        'title': post.get('title', 'Sin título'),
-                        'subreddit': post.get('subreddit', ''),
-                        'url': f"https://reddit.com{post.get('permalink', '')}",
-                        'score': post.get('score', 0),
-                        'created': datetime.fromtimestamp(post.get('created_utc', 0)).strftime('%Y-%m-%d')
-                    })
+                for item in data.get("data", {}).get("children", []):
+                    post = item.get("data", {})
+                    results.append(
+                        {
+                            "title": post.get("title", "Sin título"),
+                            "subreddit": post.get("subreddit", ""),
+                            "url": f"https://reddit.com{post.get('permalink', '')}",
+                            "score": post.get("score", 0),
+                            "created": datetime.fromtimestamp(post.get("created_utc", 0)).strftime("%Y-%m-%d"),
+                        }
+                    )
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -140,37 +141,36 @@ class SearchSources:
 
     def search_github(self, phone_number):
         """Search GitHub code repository"""
-        if not SEARCH_CONFIG.get('github', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("github", {}).get("enabled", True):
             return []
-        if not self.api_keys['github']:
+        if not self.api_keys["github"]:
             return []
 
-        cache_key = get_cache_key(phone_number, 'github')
+        cache_key = get_cache_key(phone_number, "github")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
         try:
             url = "https://api.github.com/search/code"
-            headers = {
-                'Authorization': f'token {self.api_keys["github"]}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-            params = {'q': f'"{phone_number}"'}
+            headers = {"Authorization": f'token {self.api_keys["github"]}', "Accept": "application/vnd.github.v3+json"}
+            params = {"q": f'"{phone_number}"'}
 
             response = self.make_request(url, params=params, headers=headers)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('items', [])[:SEARCH_CONFIG['github'].get('max_results', 10)]:
-                    repo = item.get('repository', {})
-                    results.append({
-                        'repository': repo.get('full_name', 'Unknown'),
-                        'path': item.get('path', ''),
-                        'url': item.get('html_url', ''),
-                        'language': repo.get('language', '')
-                    })
+                for item in data.get("items", [])[: SEARCH_CONFIG["github"].get("max_results", 10)]:
+                    repo = item.get("repository", {})
+                    results.append(
+                        {
+                            "repository": repo.get("full_name", "Unknown"),
+                            "path": item.get("path", ""),
+                            "url": item.get("html_url", ""),
+                            "language": repo.get("language", ""),
+                        }
+                    )
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -179,12 +179,12 @@ class SearchSources:
 
     def search_twitter(self, phone_number):
         """Search Twitter using SerpAPI"""
-        if not SEARCH_CONFIG.get('twitter', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("twitter", {}).get("enabled", True):
             return []
-        if not self.api_keys['serpapi']:
+        if not self.api_keys["serpapi"]:
             return []
 
-        cache_key = get_cache_key(phone_number, 'twitter')
+        cache_key = get_cache_key(phone_number, "twitter")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
@@ -192,22 +192,18 @@ class SearchSources:
         try:
             url = "https://serpapi.com/search"
             params = {
-                'q': f'"{phone_number}" site:twitter.com OR site:x.com',
-                'api_key': self.api_keys['serpapi'],
-                'engine': 'google',
-                'num': SEARCH_CONFIG['twitter'].get('max_results', 15)
+                "q": f'"{phone_number}" site:twitter.com OR site:x.com',
+                "api_key": self.api_keys["serpapi"],
+                "engine": "google",
+                "num": SEARCH_CONFIG["twitter"].get("max_results", 15),
             }
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('organic_results', [])[:SEARCH_CONFIG['twitter'].get('max_results', 15)]:
-                    results.append({
-                        'title': item.get('title', 'Sin título'),
-                        'link': item.get('link', ''),
-                        'snippet': item.get('snippet', '')
-                    })
+                for item in data.get("organic_results", [])[: SEARCH_CONFIG["twitter"].get("max_results", 15)]:
+                    results.append({"title": item.get("title", "Sin título"), "link": item.get("link", ""), "snippet": item.get("snippet", "")})
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -216,12 +212,12 @@ class SearchSources:
 
     def search_vk(self, phone_number):
         """Search VK (VKontakte) using SerpAPI"""
-        if not SEARCH_CONFIG.get('vk', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("vk", {}).get("enabled", True):
             return []
-        if not self.api_keys['serpapi']:
+        if not self.api_keys["serpapi"]:
             return []
 
-        cache_key = get_cache_key(phone_number, 'vk')
+        cache_key = get_cache_key(phone_number, "vk")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
@@ -229,22 +225,18 @@ class SearchSources:
         try:
             url = "https://serpapi.com/search"
             params = {
-                'q': f'"{phone_number}" site:vk.com',
-                'api_key': self.api_keys['serpapi'],
-                'engine': 'google',
-                'num': SEARCH_CONFIG['vk'].get('max_results', 10)
+                "q": f'"{phone_number}" site:vk.com',
+                "api_key": self.api_keys["serpapi"],
+                "engine": "google",
+                "num": SEARCH_CONFIG["vk"].get("max_results", 10),
             }
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('organic_results', [])[:SEARCH_CONFIG['vk'].get('max_results', 10)]:
-                    results.append({
-                        'title': item.get('title', 'Sin título'),
-                        'link': item.get('link', ''),
-                        'snippet': item.get('snippet', '')
-                    })
+                for item in data.get("organic_results", [])[: SEARCH_CONFIG["vk"].get("max_results", 10)]:
+                    results.append({"title": item.get("title", "Sin título"), "link": item.get("link", ""), "snippet": item.get("snippet", "")})
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -253,12 +245,12 @@ class SearchSources:
 
     def search_telegram(self, phone_number):
         """Search Telegram using SerpAPI"""
-        if not SEARCH_CONFIG.get('telegram', {}).get('enabled', True):
+        if not SEARCH_CONFIG.get("telegram", {}).get("enabled", True):
             return []
-        if not self.api_keys['serpapi']:
+        if not self.api_keys["serpapi"]:
             return []
 
-        cache_key = get_cache_key(phone_number, 'telegram')
+        cache_key = get_cache_key(phone_number, "telegram")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
@@ -266,56 +258,48 @@ class SearchSources:
         try:
             url = "https://serpapi.com/search"
             params = {
-                'q': f'"{phone_number}" site:t.me OR site:telegram.org',
-                'api_key': self.api_keys['serpapi'],
-                'engine': 'google',
-                'num': SEARCH_CONFIG['telegram'].get('max_results', 10)
+                "q": f'"{phone_number}" site:t.me OR site:telegram.org',
+                "api_key": self.api_keys["serpapi"],
+                "engine": "google",
+                "num": SEARCH_CONFIG["telegram"].get("max_results", 10),
             }
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('organic_results', [])[:SEARCH_CONFIG['telegram'].get('max_results', 10)]:
-                    results.append({
-                        'title': item.get('title', 'Sin título'),
-                        'link': item.get('link', ''),
-                        'snippet': item.get('snippet', '')
-                    })
+                for item in data.get("organic_results", [])[: SEARCH_CONFIG["telegram"].get("max_results", 10)]:
+                    results.append({"title": item.get("title", "Sin título"), "link": item.get("link", ""), "snippet": item.get("snippet", "")})
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
             logger.error(f"Telegram search error: {e}")
         return []
 
-    def check_numverify(self, phone_number, region='pe'):
+    def check_numverify(self, phone_number, region="pe"):
         """Check phone using numverify API"""
-        if not self.api_keys['numverify']:
+        if not self.api_keys["numverify"]:
             return None
 
-        cache_key = get_cache_key(phone_number, 'numverify')
+        cache_key = get_cache_key(phone_number, "numverify")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
         try:
             url = "https://apilayer.net/api/validate"
-            params = {
-                'access_key': self.api_keys['numverify'],
-                'number': phone_number,
-                'country_code': region.upper()
-            }
+            params = {"access_key": self.api_keys["numverify"], "number": phone_number, "country_code": region.upper()}
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
-                if data.get('valid'):
+                if data.get("valid"):
                     result = {
-                        'country': data.get('country_name'),
-                        'location': data.get('location'),
-                        'carrier': data.get('carrier'),
-                        'line_type': data.get('line_type'),
-                        'international_format': data.get('international_format')
+                        "country": data.get("country_name"),
+                        "location": data.get("location"),
+                        "carrier": data.get("carrier"),
+                        "line_type": data.get("line_type"),
+                        "international_format": data.get("international_format"),
                     }
                     save_to_cache(cache_key, result)
                     return result
@@ -325,68 +309,23 @@ class SearchSources:
 
     def search_duckduckgo_html(self, query):
         """Search DuckDuckGo HTML directly (no API key needed)"""
-        cache_key = get_cache_key(query, 'duckduckgo_html')
-        cached = load_from_cache(cache_key)
-        if cached:
-            return cached
-
-        results = []
-        try:
-            url = "https://html.duckduckgo.com/html/"
-            params = {'q': query}
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml',
-                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
-            }
-
-            response = self.make_request(url, params=params, headers=headers, timeout=5)
-
-            if response and response.status_code == 200:
-                # Extract titles
-                title_matches = re.findall(r'class="result__a"[^>]*href="[^"]*"[^>]*>(.*?)</a>', response.text, re.DOTALL)
-                # Extract snippets
-                snippet_matches = re.findall(r'class="result__snippet"[^>]*>(.*?)</', response.text, re.DOTALL)
-                # Extract URLs
-                url_matches = re.findall(r'class="result__a"[^>]*href="([^"]*)"', response.text)
-
-                for i in range(min(len(title_matches), len(url_matches), 10)):
-                    title = re.sub(r'<[^>]+>', '', title_matches[i]).strip()
-                    link = url_matches[i]
-                    snippet = re.sub(r'<[^>]+>', '', snippet_matches[i]).strip()[:200] if i < len(snippet_matches) else ''
-
-                    if title and len(title) > 5:
-                        results.append({
-                            'title': title[:100],
-                            'link': link,
-                            'snippet': snippet
-                        })
-
-        except requests.exceptions.Timeout as e:
-            logger.warning(f"DuckDuckGo HTML search timeout: {e}")
-        except requests.exceptions.ConnectionError as e:
-            logger.warning(f"DuckDuckGo HTML connection error: {e}")
-        except Exception as e:
-            logger.error(f"DuckDuckGo HTML search error: {e}")
-
-        save_to_cache(cache_key, results)
-        return results
+        return search_duckduckgo_html(query)
 
     def search_yandex(self, query, max_results=10):
         """Search Yandex via HTML (no API key needed)"""
-        cache_key = get_cache_key(query, 'yandex')
+        cache_key = get_cache_key(query, "yandex")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
         results = []
         try:
-            url = "https://www.yandex.ru/search/"
-            params = {'text': query, 'lr': 213}
+            url = "https://yandex.ru/search/"
+            params = {"text": query, "lr": 213}
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html',
-                'Accept-Language': 'ru-RU,ru;q=0.9'
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html",
+                "Accept-Language": "ru-RU,ru;q=0.9",
             }
 
             response = self.make_request(url, params=params, headers=headers, timeout=10)
@@ -401,31 +340,23 @@ class SearchSources:
                     snippet_match = re.search(r'<div[^>]*class="organic__snippet"[^>]*>(.*?)</div>', block, re.DOTALL)
 
                     if title_match:
-                        title = re.sub(r'<[^>]+>', '', title_match.group(1)).strip()
-                        link = link_match.group(1) if link_match else ''
-                        snippet = re.sub(r'<[^>]+>', '', snippet_match.group(1)).strip()[:200] if snippet_match else ''
+                        title = re.sub(r"<[^>]+>", "", title_match.group(1)).strip()
+                        link = link_match.group(1) if link_match else ""
+                        snippet = re.sub(r"<[^>]+>", "", snippet_match.group(1)).strip()[:200] if snippet_match else ""
 
                         if title and len(title) > 3:
-                            results.append({
-                                'title': title[:100],
-                                'link': link,
-                                'snippet': snippet
-                            })
+                            results.append({"title": title[:100], "link": link, "snippet": snippet})
 
                 # Fallback: try alternative Yandex parsing
                 if not results:
-                    title_matches = re.findall(r'<a[^>]*>([^<]+)</a>', response.text)
+                    title_matches = re.findall(r"<a[^>]*>([^<]+)</a>", response.text)
                     link_matches = re.findall(r'href="(https?://[^"]+)"', response.text)
 
                     for i in range(min(len(title_matches), len(link_matches), max_results)):
                         title = title_matches[i].strip()
                         link = link_matches[i]
-                        if len(title) > 10 and 'yandex' not in link and 'cdn' not in link and 'ya.ru' not in link:
-                            results.append({
-                                'title': title[:100],
-                                'link': link,
-                                'snippet': ''
-                            })
+                        if len(title) > 10 and "yandex" not in link and "cdn" not in link and "ya.ru" not in link:
+                            results.append({"title": title[:100], "link": link, "snippet": ""})
 
         except Exception as e:
             logger.error(f"Yandex search error: {e}")
@@ -433,20 +364,14 @@ class SearchSources:
         save_to_cache(cache_key, results)
         return results
 
-    def search_names(self, full_name, region='ru'):
+    def search_names(self, full_name, region="ru"):
         """Search by full name (ФИО)"""
-        cache_key = get_cache_key(full_name, 'names')
+        cache_key = get_cache_key(full_name, "names")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
-        results = {
-            'duckduckgo': [],
-            'yandex': [],
-            'vk': [],
-            'telegram': [],
-            'linkedin': []
-        }
+        results = {"duckduckgo": [], "yandex": [], "vk": [], "telegram": [], "linkedin": []}
 
         # Parse name parts
         name_parts = full_name.strip().split()
@@ -454,99 +379,91 @@ class SearchSources:
             last_name, first_name, middle_name = name_parts[0], name_parts[1], name_parts[2]
         elif len(name_parts) == 2:
             last_name, first_name = name_parts[0], name_parts[1]
-            middle_name = ''
+            middle_name = ""
         else:
             last_name = name_parts[0]
-            first_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-            middle_name = ''
+            first_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+            middle_name = ""
 
         # Build queries
         queries = {
-            'duckduckgo': [
+            "duckduckgo": [
                 f'"{last_name} {first_name} {middle_name}"',
                 f'"{last_name} {first_name}"',
-                f'{last_name} {first_name} контактный телефон',
-                f'{last_name} {first_name} отзывы',
-                f'{last_name} {first_name} резюме',
-                f'{last_name} {first_name} компания',
+                f"{last_name} {first_name} контактный телефон",
+                f"{last_name} {first_name} отзывы",
+                f"{last_name} {first_name} резюме",
+                f"{last_name} {first_name} компания",
             ],
-            'vk': [
+            "vk": [
                 f'"{last_name} {first_name}"',
-                f'{last_name} {first_name}moscow',
+                f"{last_name} {first_name}moscow",
             ],
-            'linkedin': [
+            "linkedin": [
                 f'"{last_name} {first_name}"',
-            ]
+            ],
         }
 
         # DuckDuckGo search
-        for query in queries.get('duckduckgo', []):
+        for query in queries.get("duckduckgo", []):
             ddg_results = self.search_duckduckgo_html(query)
-            results['duckduckgo'].extend(ddg_results)
+            results["duckduckgo"].extend(ddg_results)
 
         # Remove duplicates
-        results['duckduckgo'] = _remove_duplicates(results['duckduckgo'])
+        results["duckduckgo"] = _remove_duplicates(results["duckduckgo"])
 
         # Yandex search
-        for query in queries.get('duckduckgo', [])[:5]:
+        for query in queries.get("duckduckgo", [])[:5]:
             yandex_results = self.search_yandex(query)
-            results['yandex'].extend(yandex_results)
+            results["yandex"].extend(yandex_results)
 
-        results['yandex'] = _remove_duplicates(results['yandex'])
+        results["yandex"] = _remove_duplicates(results["yandex"])
 
         # VK search (via SerpAPI or DDG)
-        for query in queries.get('vk', []):
-            if self.api_keys['serpapi']:
+        for query in queries.get("vk", []):
+            if self.api_keys["serpapi"]:
                 vk_results = self.search_vk_via_serpapi(query)
-                results['vk'].extend(vk_results)
+                results["vk"].extend(vk_results)
             else:
-                vk_results = self.search_duckduckgo_html(f'{query} site:vk.com')
-                results['vk'].extend(vk_results)
+                vk_results = self.search_duckduckgo_html(f"{query} site:vk.com")
+                results["vk"].extend(vk_results)
 
-        results['vk'] = _remove_duplicates(results['vk'])[:10]
+        results["vk"] = _remove_duplicates(results["vk"])[:10]
 
         # LinkedIn search
-        for query in queries.get('linkedin', []):
-            li_results = self.search_duckduckgo_html(f'{query} site:linkedin.com')
-            results['linkedin'].extend(li_results)
+        for query in queries.get("linkedin", []):
+            li_results = self.search_duckduckgo_html(f"{query} site:linkedin.com")
+            results["linkedin"].extend(li_results)
 
-        results['linkedin'] = _remove_duplicates(results['linkedin'])[:10]
+        results["linkedin"] = _remove_duplicates(results["linkedin"])[:10]
 
         # Telegram search
-        tg_results = self.search_duckduckgo_html(f'{full_name} site:t.me')
-        results['telegram'] = _remove_duplicates(tg_results)[:10]
+        tg_results = self.search_duckduckgo_html(f"{full_name} site:t.me")
+        results["telegram"] = _remove_duplicates(tg_results)[:10]
 
         save_to_cache(cache_key, results)
         return results
 
     def search_vk_via_serpapi(self, query):
         """Search VK via SerpAPI"""
-        if not self.api_keys['serpapi']:
+        if not self.api_keys["serpapi"]:
             return []
 
-        cache_key = get_cache_key(query, 'vk_serpapi')
+        cache_key = get_cache_key(query, "vk_serpapi")
         cached = load_from_cache(cache_key)
         if cached:
             return cached
 
         try:
             url = "https://serpapi.com/search"
-            params = {
-                'q': f'{query} site:vk.com',
-                'api_key': self.api_keys['serpapi'],
-                'num': 10
-            }
+            params = {"q": f"{query} site:vk.com", "api_key": self.api_keys["serpapi"], "num": 10}
             response = self.make_request(url, params=params)
 
             if response and response.status_code == 200:
                 data = response.json()
                 results = []
-                for item in data.get('organic_results', [])[:10]:
-                    results.append({
-                        'title': item.get('title', ''),
-                        'link': item.get('link', ''),
-                        'snippet': item.get('snippet', '')
-                    })
+                for item in data.get("organic_results", [])[:10]:
+                    results.append({"title": item.get("title", ""), "link": item.get("link", ""), "snippet": item.get("snippet", "")})
                 save_to_cache(cache_key, results)
                 return results
         except Exception as e:
@@ -559,14 +476,14 @@ class SearchSources:
 
         if phone_number:
             queries = [
-                (f'"{phone_number}" site:avito.ru', 'Avito'),
-                (f'"{phone_number}" site:youla.ru', 'Youla'),
-                (f'"{phone_number}" site:plateau.ru', 'Plateau'),
+                (f'"{phone_number}" site:avito.ru', "Avito"),
+                (f'"{phone_number}" site:youla.ru', "Youla"),
+                (f'"{phone_number}" site:plateau.ru', "Plateau"),
             ]
         elif name:
             queries = [
-                (f'"{name}" site:avito.ru', 'Avito'),
-                (f'"{name}" site:youla.ru', 'Youla'),
+                (f'"{name}" site:avito.ru', "Avito"),
+                (f'"{name}" site:youla.ru', "Youla"),
             ]
         else:
             return results
@@ -574,20 +491,16 @@ class SearchSources:
         for query, site in queries:
             ddg_results = self.search_duckduckgo_html(query)
             for r in ddg_results:
-                r['site'] = site
+                r["site"] = site
             results.extend(ddg_results)
 
         return _remove_duplicates(results)
 
     def check_data_breach(self, phone_number, email=None):
         """Check if phone/email appears in data breaches"""
-        results = {
-            'breaches': [],
-            'pastes': [],
-            'reputation': 'unknown'
-        }
+        results = {"breaches": [], "pastes": [], "reputation": "unknown"}
 
-        clean_number = phone_number.replace('+', '').replace(' ', '').replace('-', '')
+        clean_number = phone_number.replace("+", "").replace(" ", "").replace("-", "")
 
         queries = [
             f'"{phone_number}" data breach OR leak OR hacked',
@@ -599,7 +512,7 @@ class SearchSources:
         for query in queries:
             if query:
                 ddg_results = self.search_duckduckgo_html(query)
-                results['breaches'].extend(ddg_results)
+                results["breaches"].extend(ddg_results)
 
         pastebin_queries = [
             f'site:pastebin.com "{phone_number}"',
@@ -609,55 +522,48 @@ class SearchSources:
 
         for query in pastebin_queries:
             ddg_results = self.search_duckduckgo_html(query)
-            results['pastes'].extend(ddg_results)
+            results["pastes"].extend(ddg_results)
 
-        results['breaches'] = _remove_duplicates(results['breaches'])[:10]
-        results['pastes'] = _remove_duplicates(results['pastes'])[:10]
+        results["breaches"] = _remove_duplicates(results["breaches"])[:10]
+        results["pastes"] = _remove_duplicates(results["pastes"])[:10]
 
-        spam_keywords = ['spam', 'scam', 'fraud', 'phishing', 'malware']
-        total_results = len(results['breaches']) + len(results['pastes'])
+        total_results = len(results["breaches"]) + len(results["pastes"])
 
-        if total_results > 20:
-            results['reputation'] = 'dangerous'
+        if total_results >= 20:
+            results["reputation"] = "dangerous"
         elif total_results > 10:
-            results['reputation'] = 'suspicious'
+            results["reputation"] = "suspicious"
         elif total_results > 0:
-            results['reputation'] = 'neutral'
+            results["reputation"] = "neutral"
         else:
-            results['reputation'] = 'clean'
+            results["reputation"] = "clean"
 
         return results
 
     def search_social_media(self, phone_number, name=None):
         """Search social media platforms"""
-        results = {
-            'facebook': [],
-            'instagram': [],
-            'linkedin': [],
-            'twitter': [],
-            'tiktok': []
-        }
+        results = {"facebook": [], "instagram": [], "linkedin": [], "twitter": [], "tiktok": []}
 
         queries = {
-            'facebook': [
+            "facebook": [
                 f'site:facebook.com "{phone_number}"',
                 f'site:facebook.com "{name}"' if name else f'site:facebook.com "{phone_number}"',
             ],
-            'instagram': [
+            "instagram": [
                 f'site:instagram.com "{phone_number}"',
                 f'site:instagram.com "{name}"' if name else f'site:instagram.com "{phone_number}"',
             ],
-            'linkedin': [
+            "linkedin": [
                 f'site:linkedin.com "{phone_number}"',
                 f'site:linkedin.com "{name}"' if name else f'site:linkedin.com "{phone_number}"',
             ],
-            'twitter': [
+            "twitter": [
                 f'site:twitter.com "{phone_number}"',
                 f'site:x.com "{phone_number}"',
             ],
-            'tiktok': [
+            "tiktok": [
                 f'site:tiktok.com "@{name}"' if name else f'site:tiktok.com "{phone_number}"',
-            ]
+            ],
         }
 
         for platform, query_list in queries.items():
@@ -670,16 +576,12 @@ class SearchSources:
 
     def check_telegram_contacts(self, phone_number):
         """Check if phone is registered on Telegram (via t.me links)"""
-        results = {
-            'profiles': [],
-            'channels': [],
-            'groups': []
-        }
+        results = {"profiles": [], "channels": [], "groups": []}
 
-        clean_number = phone_number.replace('+', '').replace(' ', '').replace('-', '')
+        clean_number = phone_number.replace("+", "").replace(" ", "").replace("-", "")
 
         queries = [
-            f't.me/{clean_number}',
+            f"t.me/{clean_number}",
             f't.me search "{phone_number}"',
             f'site:t.me "{phone_number}"',
         ]
@@ -687,41 +589,37 @@ class SearchSources:
         for query in queries:
             ddg_results = self.search_duckduckgo_html(query)
             for r in ddg_results:
-                if 't.me/' in r.get('link', ''):
-                    if '/channel/' in r.get('link', ''):
-                        results['channels'].append(r)
-                    elif '/joinchat/' in r.get('link', ''):
-                        results['groups'].append(r)
+                if "t.me/" in r.get("link", ""):
+                    if "/channel/" in r.get("link", ""):
+                        results["channels"].append(r)
+                    elif "/joinchat/" in r.get("link", ""):
+                        results["groups"].append(r)
                     else:
-                        results['profiles'].append(r)
+                        results["profiles"].append(r)
 
-        results['profiles'] = _remove_duplicates(results['profiles'])[:5]
-        results['channels'] = _remove_duplicates(results['channels'])[:5]
-        results['groups'] = _remove_duplicates(results['groups'])[:5]
+        results["profiles"] = _remove_duplicates(results["profiles"])[:5]
+        results["channels"] = _remove_duplicates(results["channels"])[:5]
+        results["groups"] = _remove_duplicates(results["groups"])[:5]
 
         return results
 
     def search_email_related(self, email):
         """Search for email leaks and associated accounts"""
-        results = {
-            'breaches': [],
-            'accounts': [],
-            'social': []
-        }
+        results = {"breaches": [], "accounts": [], "social": []}
 
         queries = {
-            'breaches': [
+            "breaches": [
                 f'"{email}" data breach',
                 f'"{email}" leaked',
             ],
-            'accounts': [
+            "accounts": [
                 f'site:github.com "{email}"',
                 f'site:stackoverflow.com "{email}"',
             ],
-            'social': [
+            "social": [
                 f'site:linkedin.com "{email}"',
                 f'site:twitter.com "{email}"',
-            ]
+            ],
         }
 
         for category, query_list in queries.items():
